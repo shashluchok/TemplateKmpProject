@@ -1,0 +1,103 @@
+build:
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+# Composable functions tend to be longer and take more parameters than regular
+# functions (modifiers, colors, callbacks, etc.), so default thresholds are
+# relaxed slightly to avoid noisy false positives on UI code.
+complexity:
+  LongMethod:
+    threshold: 80
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 8
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    thresholdInFiles: 15
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+  # expect/actual platform files conventionally keep a shared base name
+  # (Platform.kt, Platform.android.kt, Platform.jvm.kt, ...) that won't match
+  # the platform-specific declaration name inside (AndroidPlatform, JVMPlatform, ...).
+  MatchingDeclarationName:
+    active: false
+
+style:
+  # @Preview functions are entry points for tooling only, not called from app code.
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
+  MagicNumber:
+    excludes: ['**/*Test/**']
+
+# Compose-specific rules, see https://mrmans0n.github.io/compose-rules/detekt/
+Compose:
+  ComposableAnnotationNaming:
+    active: true
+  ComposableNaming:
+    active: true
+  ComposableParamOrder:
+    active: true
+  CompositionLocalAllowlist:
+    active: true
+    allowedCompositionLocals: LocalDimens
+  CompositionLocalNaming:
+    active: true
+  ContentEmitterReturningValues:
+    active: true
+  ContentTrailingLambda:
+    active: true
+  ContentSlotReused:
+    active: true
+  DefaultsVisibility:
+    active: true
+  LambdaParameterEventTrailing:
+    active: true
+  LambdaParameterInRestartableEffect:
+    active: true
+  Material2:
+    active: false # Opt-in: enable if migrating away from Material 2
+  ModifierClickableOrder:
+    active: true
+  ModifierComposed:
+    active: true
+  ModifierMissing:
+    active: true
+  ModifierNaming:
+    active: true
+  ModifierNotUsedAtRoot:
+    active: true
+  ModifierReused:
+    active: true
+  ModifierWithoutDefault:
+    active: true
+  MultipleEmitters:
+    active: true
+  MutableParams:
+    active: true
+  MutableStateAutoboxing:
+    active: true
+  MutableStateParam:
+    active: true
+  ParameterNaming:
+    active: true
+  PreviewAnnotationNaming:
+    active: true
+  PreviewNaming:
+    active: false # Opt-in: enforces a naming strategy for @Preview functions
+  PreviewPublic:
+    active: true
+  RememberMissing:
+    active: true
+  RememberContentMissing:
+    active: true
+  UnstableCollections:
+    active: false # Opt-in: only useful with strong skipping disabled
+  ViewModelForwarding:
+    active: true
+  ViewModelInjection:
+    active: true

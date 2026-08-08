@@ -1,0 +1,10 @@
+root = true
+
+[*.{kt,kts}]
+ktlint_code_style = ktlint_official
+ktlint_function_naming_ignore_when_annotated_with=Composable
+# Forces the RHS of an assignment onto its own line whenever it's a multiline expression
+# (e.g. val x =\n    Foo(...)). Keep the rest of ktlint_official, just skip this one rule.
+ktlint_standard_multiline-expression-wrapping = disabled
+# Theme-level CompositionLocals: an accepted exception to the "avoid new CompositionLocals" rule.
+compose_allowed_composition_locals = LocalDimens

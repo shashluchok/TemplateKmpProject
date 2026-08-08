@@ -1,0 +1,86 @@
+[versions]
+# Build tooling
+agp = "9.2.1"
+kotlin = "2.4.10"
+ktlintPlugin = "14.2.0"
+detektPlugin = "1.23.8"
+
+# Android SDK
+android-compileSdk = "37"
+# Android 17 (API 37)'s base platform is published as SDK Manager package "android-37.0",
+# not the bare "android-37" that a plain compileSdk = 37 Int assignment resolves to.
+android-compileSdkMinor = "0"
+android-minSdk = "28"
+android-targetSdk = "37"
+
+# AndroidX
+androidx-activity = "1.13.0"
+androidx-lifecycle = "2.11.0"
+
+# Compose
+composeMultiplatform = "1.11.1"
+material3 = "1.11.0-alpha07"
+composeRules = "0.6.4"
+# Pinned below the latest compose-rules release: 0.5.x/0.6.x target detekt 2.0.0-alpha,
+# 0.4.28 is the last release compatible with the stable detekt 1.23.x line.
+composeRulesDetekt = "0.4.28"
+
+# Kotlin ecosystem
+kotlin-wrappers = "2026.8.0"
+kotlinx-coroutines = "1.11.0"
+
+# DI
+koin = "4.2.2"
+
+# Navigation
+navigation3 = "1.1.1"
+
+[libraries]
+# Kotlin / testing
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+# AndroidX
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+
+# Compose
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
+compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
+compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
+compose-rules = { module = "io.nlopez.compose.rules:ktlint", version.ref = "composeRules" }
+compose-rules-detekt = { module = "io.nlopez.compose.rules:detekt", version.ref = "composeRulesDetekt" }
+
+# Kotlin ecosystem
+kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlin-wrappers" }
+
+# DI
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
+
+# Navigation
+navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
+
+[plugins]
+# Android
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+
+# Kotlin
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+
+# Compose
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+
+# Code quality
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detektPlugin" }

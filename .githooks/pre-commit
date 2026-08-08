@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Pre-commit checks: string resource key format, ktlint, detekt.
+#
+# Installed automatically -- see the core.hooksPath setup in the root build.gradle.kts.
+# No manual `git config` step required.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+FAIL=0
+
+PYTHON=python3
+command -v python3 >/dev/null 2>&1 || PYTHON=python
+
+# 1. String resource key format ----------------------------------------------
+STRING_RES_FILES=$(echo "$STAGED_FILES" | grep -E '(/res/values(-[^/]+)?/strings\.xml$|/composeResources/values(-[^/]+)?/strings\.xml$|\.strings$)' || true)
+if [ -n "$STRING_RES_FILES" ]; then
+    echo "-> Checking string resource key format..."
+    if ! "$PYTHON" config/string-keys/validate_string_keys.py --staged --files $STRING_RES_FILES; then
+        FAIL=1
+    fi
+fi
+
+# 2. ktlint + detekt, both scoped to staged files only (see -Pprecommit wiring
+#    in build.gradle.kts) ------------------------------------------------------
+KT_FILES=$(echo "$STAGED_FILES" | grep -E '\.kts?$' || true)
+if [ -n "$KT_FILES" ]; then
+    echo "-> Running ktlint + detekt (staged files only)..."
+    if ! ./gradlew -Pprecommit=true ktlintCheck detekt --console=plain; then
+        FAIL=1
+    fi
+fi
+
+if [ "$FAIL" -ne 0 ]; then
+    echo ""
+    echo "Pre-commit checks failed. Fix the issues above, then commit again."
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,6 @@
+# String resource keys exempt from the screen__component__type__property naming
+# convention -- typically platform-reserved names required by the OS/build tooling
+# rather than UI copy (e.g. Android's android:label reference in AndroidManifest.xml).
+# One key per line, "#" starts a comment.
+
+app_name

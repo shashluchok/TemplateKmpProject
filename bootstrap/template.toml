@@ -1,0 +1,3 @@
+# Edit before running bootstrap/bootstrap_project.py, then run it.
+app_name = "TemplateKmpProject" # display name: strings.xml, window title, <title>, iOS PRODUCT_NAME
+package = "com.shashluchok.templatekmpproject" # full Kotlin package, any (e.g. com.example.myapp)
