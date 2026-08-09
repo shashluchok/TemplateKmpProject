@@ -17,8 +17,8 @@ from bootstrap_project import (
     check_manifest_files_exist,
     check_not_default,
     check_package_dirs_available,
-    check_pristine_template,
     check_target_root_available,
+    check_template_state,
     load_config,
     package_to_path,
     rename_package_dirs,
@@ -26,6 +26,7 @@ from bootstrap_project import (
     replace_app_name_references,
     replace_in_file,
     replace_package_references,
+    run_gradle_sync,
     validate_app_name,
     validate_package,
 )
@@ -155,7 +156,7 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-class CheckPristineTemplateTests(unittest.TestCase):
+class CheckTemplateStateTests(unittest.TestCase):
     def test_passes_on_pristine_layout(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -170,7 +171,33 @@ class CheckPristineTemplateTests(unittest.TestCase):
                 repo_root / "settings.gradle.kts",
                 f'rootProject.name = "{TEMPLATE_APP_NAME}"\n',
             )
-            check_pristine_template(repo_root)  # must not raise
+            check_template_state(repo_root, "com.example.testapp", "TestApp")  # must not raise
+
+    def test_passes_on_already_bootstrapped_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write(
+                repo_root
+                / "androidApp/src/main/kotlin"
+                / package_to_path("com.example.testapp")
+                / "App.kt",
+                "package com.example.testapp\n",
+            )
+            _write(
+                repo_root / "settings.gradle.kts",
+                'rootProject.name = "TestApp"\n',
+            )
+            check_template_state(repo_root, "com.example.testapp", "TestApp")  # must not raise
+
+    def test_raises_when_neither_pristine_nor_bootstrapped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write(
+                repo_root / "settings.gradle.kts",
+                'rootProject.name = "SomethingElse"\n',
+            )
+            with self.assertRaises(BootstrapError):
+                check_template_state(repo_root, "com.example.testapp", "TestApp")
 
     def test_raises_when_marker_dir_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -180,7 +207,7 @@ class CheckPristineTemplateTests(unittest.TestCase):
                 f'rootProject.name = "{TEMPLATE_APP_NAME}"\n',
             )
             with self.assertRaises(BootstrapError):
-                check_pristine_template(repo_root)
+                check_template_state(repo_root, "com.example.testapp", "TestApp")
 
 
 def _write_all_manifest_files(repo_root: Path) -> None:
@@ -195,7 +222,16 @@ class CheckManifestFilesExistTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
             _write_all_manifest_files(repo_root)
-            check_manifest_files_exist(repo_root)  # must not raise
+            check_manifest_files_exist(repo_root, "com.example.testapp")  # must not raise
+
+    def test_passes_when_files_are_at_bootstrapped_locations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            for rel_path in PACKAGE_REFERENCE_FILES:
+                _write(repo_root / rel_path, "placeholder\n")
+            for rel_path in app_name_files("com.example.testapp"):
+                _write(repo_root / rel_path, "placeholder\n")
+            check_manifest_files_exist(repo_root, "com.example.testapp")  # must not raise
 
     def test_raises_listing_every_missing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -203,7 +239,7 @@ class CheckManifestFilesExistTests(unittest.TestCase):
             _write_all_manifest_files(repo_root)
             (repo_root / "iosApp/Configuration/Config.xcconfig").unlink()
             with self.assertRaises(BootstrapError) as ctx:
-                check_manifest_files_exist(repo_root)
+                check_manifest_files_exist(repo_root, "com.example.testapp")
             self.assertIn("iosApp/Configuration/Config.xcconfig", str(ctx.exception))
 
 
@@ -236,6 +272,27 @@ class CheckPackageDirsAvailableTests(unittest.TestCase):
             )
             with self.assertRaises(BootstrapError):
                 check_package_dirs_available(repo_root, "com.example.testapp")
+
+    def test_passes_when_target_is_an_empty_leftover_directory(self):
+        # e.g. a previous bootstrap run got reverted (tracked template files
+        # restored) but the untracked, now-empty target directories it had
+        # created were left behind -- git never reports empty directories, so
+        # this is easy to miss. Empty of real files anywhere inside (even
+        # nested empty subdirectories, like an empty leftover "di") isn't a
+        # conflict.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write(
+                repo_root
+                / "androidApp/src/main/kotlin"
+                / package_to_path(TEMPLATE_PACKAGE)
+                / "App.kt",
+                f"package {TEMPLATE_PACKAGE}\n",
+            )
+            (
+                repo_root / "androidApp/src/main/kotlin/com/example/testapp/di"
+            ).mkdir(parents=True)
+            check_package_dirs_available(repo_root, "com.example.testapp")  # must not raise
 
 
 class RenamePackageDirsTests(unittest.TestCase):
@@ -287,6 +344,36 @@ class RenamePackageDirsTests(unittest.TestCase):
             self.assertTrue((repo_root / "androidApp/src/main/kotlin/com/shashluchok").is_dir())
             self.assertTrue(
                 (repo_root / "androidApp/src/main/kotlin/com/shashluchok/testapp").is_dir()
+            )
+
+    def test_clears_empty_leftover_target_before_moving_in(self):
+        # Windows' Path.rename refuses to move onto an existing directory even
+        # when it's empty -- the leftover (with a nested empty "di" subdirectory,
+        # like an IDE-reverted rename can leave behind) must be cleared first, and
+        # the real content still ends up there.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write(
+                repo_root
+                / "androidApp/src/main/kotlin"
+                / package_to_path(TEMPLATE_PACKAGE)
+                / "App.kt",
+                f"package {TEMPLATE_PACKAGE}\n",
+            )
+            (
+                repo_root / "androidApp/src/main/kotlin/com/example/testapp/di"
+            ).mkdir(parents=True)
+
+            renamed = rename_package_dirs(repo_root, TEMPLATE_PACKAGE, "com.example.testapp")
+
+            self.assertEqual(len(renamed), 1)
+            self.assertTrue(
+                (
+                    repo_root / "androidApp/src/main/kotlin/com/example/testapp/App.kt"
+                ).is_file()
+            )
+            self.assertFalse(
+                (repo_root / "androidApp/src/main/kotlin/com/example/testapp/di").exists()
             )
 
     def test_different_prefix_prunes_now_empty_old_ancestors(self):
@@ -453,6 +540,14 @@ class CheckTargetRootAvailableTests(unittest.TestCase):
             with self.assertRaises(BootstrapError):
                 check_target_root_available(repo_root, "NewName")
 
+    def test_passes_when_repo_already_named_target(self):
+        # Already bootstrapped (or the folder happened to be named this way from the
+        # start, e.g. by Android Studio) -- nothing to rename, not a conflict.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "NewName"
+            repo_root.mkdir()
+            check_target_root_available(repo_root, "NewName")  # must not raise
+
 
 class RenameProjectRootTests(unittest.TestCase):
     def test_renames_directory_and_returns_new_path(self):
@@ -472,6 +567,53 @@ class RenameProjectRootTests(unittest.TestCase):
                 )
             finally:
                 os.chdir(original_cwd)
+
+    def test_returns_unchanged_when_already_named_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "NewName"
+            repo_root.mkdir()
+            _write(repo_root / "marker.txt", "x")
+
+            result = rename_project_root(repo_root, "NewName")
+
+            self.assertEqual(result, repo_root)
+            self.assertTrue(repo_root.is_dir())
+            self.assertEqual((repo_root / "marker.txt").read_text(encoding="utf-8"), "x")
+
+
+class RunGradleSyncTests(unittest.TestCase):
+    @staticmethod
+    def _wrapper_name() -> str:
+        return "gradlew.bat" if os.name == "nt" else "gradlew"
+
+    def test_skips_when_no_wrapper_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            with patch("bootstrap_project.subprocess.run") as mock_run:
+                run_gradle_sync(repo_root)  # must not raise
+            mock_run.assert_not_called()
+
+    def test_runs_wrapper_and_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            wrapper = repo_root / self._wrapper_name()
+            _write(wrapper, "echo sync\n")
+            with patch("bootstrap_project.subprocess.run") as mock_run:
+                mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+                run_gradle_sync(repo_root)  # must not raise
+
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            self.assertEqual(args[0], [str(wrapper), "tasks"])
+            self.assertEqual(kwargs["cwd"], repo_root)
+
+    def test_reports_failure_without_raising(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write(repo_root / self._wrapper_name(), "echo sync\n")
+            with patch("bootstrap_project.subprocess.run") as mock_run:
+                mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=1)
+                run_gradle_sync(repo_root)  # must not raise
 
 
 def _write_pristine_fixture(repo_root: Path) -> None:
@@ -531,8 +673,12 @@ class BootstrapEndToEndTests(unittest.TestCase):
         try:
             _write_pristine_fixture(repo_root)
 
-            new_root = bootstrap(repo_root, repo_root / "template.toml")  # must not raise
+            with patch("bootstrap_project.run_gradle_sync") as mock_sync:
+                new_root = bootstrap(repo_root, repo_root / "template.toml")  # must not raise
 
+            # real changes happened -- gradle sync must run, against the final
+            # (renamed) location.
+            mock_sync.assert_called_once_with(new_root)
             self.assertEqual(new_root, tmp_parent / "TestApp")
             self.assertFalse(repo_root.exists())
             # package went from TEMPLATE_PACKAGE (sharing no prefix with the new one)
@@ -571,9 +717,12 @@ class BootstrapEndToEndTests(unittest.TestCase):
             with patch(
                 "bootstrap_project.rename_project_root",
                 side_effect=OSError("[WinError 32] file in use"),
-            ):
+            ), patch("bootstrap_project.run_gradle_sync") as mock_sync:
                 result = bootstrap(repo_root, repo_root / "template.toml")  # must not raise
 
+            # package/name changes succeeded despite the folder rename failing --
+            # gradle sync must still run, against the (unrenamed) original root.
+            mock_sync.assert_called_once_with(repo_root)
             self.assertEqual(result, repo_root)
             self.assertTrue(repo_root.is_dir())
             self.assertEqual(
@@ -586,6 +735,36 @@ class BootstrapEndToEndTests(unittest.TestCase):
                 (repo_root / "settings.gradle.kts").read_text(encoding="utf-8"),
                 'rootProject.name = "TestApp"\n',
             )
+
+    def test_second_run_after_success_is_idempotent(self):
+        # Re-running bootstrap() against an already-bootstrapped repo (e.g. because
+        # the project folder happened to already be named app_name, so the previous
+        # run's last step was a no-op) must succeed as a no-op, not raise.
+        original_cwd = os.getcwd()
+        tmp_parent = Path(tempfile.mkdtemp())
+        repo_root = tmp_parent / "old_name"
+        repo_root.mkdir()
+        try:
+            _write_pristine_fixture(repo_root)
+            new_root = bootstrap(repo_root, repo_root / "template.toml")
+            self.assertEqual(new_root, tmp_parent / "TestApp")
+
+            with patch("bootstrap_project.run_gradle_sync") as mock_sync:
+                second_result = bootstrap(new_root, new_root / "template.toml")
+
+            # nothing left to rename/replace on the second run -- gradle sync must
+            # be skipped, not re-run against an already-synced project.
+            mock_sync.assert_not_called()
+            self.assertEqual(second_result, new_root)
+            self.assertEqual(
+                (
+                    new_root / "androidApp/src/main/kotlin/org/example/testapp/App.kt"
+                ).read_text(encoding="utf-8"),
+                "package org.example.testapp\n",
+            )
+        finally:
+            os.chdir(original_cwd)
+            shutil.rmtree(tmp_parent, ignore_errors=True)
 
     def test_second_run_without_editing_config_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

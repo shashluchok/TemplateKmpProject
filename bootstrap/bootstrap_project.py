@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""One-shot bootstrap: renames this template's app identity (Kotlin package +
-display name) to a new project's, based on template.toml.
+"""Bootstrap: renames this template's app identity (Kotlin package + display
+name) to a new project's, based on template.toml.
 
-Run once, on a pristine clone of the template, after editing template.toml
-(both live in this same directory):
+Run on a pristine clone of the template, after editing template.toml (both
+live in this same directory):
     python bootstrap/bootstrap_project.py
+
+Safe to re-run: any marker (package dirs, name references, the project
+folder itself) already at template.toml's values is left alone instead of
+raising -- only a marker stuck in neither the template's nor the configured
+state is treated as an error.
 
 Once it succeeds, this whole `bootstrap/` directory is no longer needed --
 delete it.
@@ -13,6 +18,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -109,15 +116,27 @@ PACKAGE_REFERENCE_FILES = [
 ]
 
 
-def check_pristine_template(repo_root: Path) -> None:
-    marker_dir = repo_root / "androidApp/src/main/kotlin" / package_to_path(TEMPLATE_PACKAGE)
+def check_template_state(repo_root: Path, package: str, app_name: str) -> None:
+    """Verify the repo is either a pristine template checkout (still at the
+    template's own package/app name -- about to be bootstrapped) or already
+    bootstrapped to template.toml's current `package`/`app_name` (nothing left
+    to do here -- every step below is a no-op for whatever's already in
+    place). Anything else means the repo is in an unexpected, drifted state
+    and bootstrapping should stop before touching anything."""
+    template_marker = repo_root / "androidApp/src/main/kotlin" / package_to_path(TEMPLATE_PACKAGE)
+    bootstrapped_marker = repo_root / "androidApp/src/main/kotlin" / package_to_path(package)
     settings_file = repo_root / "settings.gradle.kts"
     settings_text = settings_file.read_text(encoding="utf-8") if settings_file.exists() else ""
-    if not marker_dir.is_dir() or TEMPLATE_APP_NAME not in settings_text:
+
+    package_ok = template_marker.is_dir() or bootstrapped_marker.is_dir()
+    name_ok = TEMPLATE_APP_NAME in settings_text or app_name in settings_text
+    if not package_ok or not name_ok:
         raise BootstrapError(
-            "this doesn't look like a pristine template checkout (expected "
-            f"{marker_dir} to exist and {TEMPLATE_APP_NAME!r} in settings.gradle.kts) "
-            "-- already bootstrapped, or the template structure changed"
+            "this doesn't look like a pristine template checkout, nor one already "
+            f"bootstrapped to template.toml's values (expected {template_marker} or "
+            f"{bootstrapped_marker} to exist, and either {TEMPLATE_APP_NAME!r} or "
+            f"{app_name!r} in settings.gradle.kts) -- already bootstrapped to "
+            "different values, or the template structure changed"
         )
 
 
@@ -136,17 +155,23 @@ def app_name_files(new_package: str) -> list[str]:
     ]
 
 
-def check_manifest_files_exist(repo_root: Path) -> None:
-    """Verify every file this script is about to touch actually exists, before any
-    filesystem mutation happens. Catches manifest/repo drift early instead of leaving
-    a half-renamed repo after a mid-run crash."""
+def check_manifest_files_exist(repo_root: Path, package: str) -> None:
+    """Verify every file this script is about to touch actually exists -- at its
+    pristine-template location, or, for whatever's already bootstrapped, at its
+    template.toml-configured location -- before any filesystem mutation happens.
+    Catches manifest/repo drift early instead of leaving a half-renamed repo after
+    a mid-run crash."""
     missing = []
     for rel_path in PACKAGE_REFERENCE_FILES:
         if not (repo_root / rel_path).is_file():
             missing.append(rel_path)
-    for rel_path in app_name_files(TEMPLATE_PACKAGE):
-        if not (repo_root / rel_path).is_file():
-            missing.append(rel_path)
+    for template_path, bootstrapped_path in zip(
+        app_name_files(TEMPLATE_PACKAGE), app_name_files(package)
+    ):
+        if not (repo_root / template_path).is_file() and not (
+            repo_root / bootstrapped_path
+        ).is_file():
+            missing.append(template_path)
     if missing:
         raise BootstrapError(
             "the following files listed in this script's manifests are missing -- "
@@ -155,17 +180,30 @@ def check_manifest_files_exist(repo_root: Path) -> None:
         )
 
 
+def _has_no_files(path: Path) -> bool:
+    """True if `path` contains no regular file anywhere within it -- only, at
+    most, nested empty directories."""
+    return not any(p.is_file() for p in path.rglob("*"))
+
+
 def check_package_dirs_available(repo_root: Path, new_package: str) -> None:
-    """Verify the new package's directory doesn't already exist under any source
-    root that's about to be renamed into it, before any mutation starts."""
+    """Verify the new package's directory doesn't already exist -- with real
+    content -- under any source root that's about to be renamed into it, before
+    any mutation starts. A leftover directory at the target that's empty of
+    real files (e.g. an empty scaffold left behind by a reverted previous run)
+    isn't a conflict -- rename_package_dirs clears it out of the way instead of
+    raising."""
     old_path = package_to_path(TEMPLATE_PACKAGE)
     new_path = package_to_path(new_package)
     conflicts = []
     for root in SOURCE_ROOTS:
         old_dir = repo_root / root / old_path
         new_dir = repo_root / root / new_path
-        if old_dir.is_dir() and new_dir != old_dir and new_dir.exists():
-            conflicts.append(str(new_dir.relative_to(repo_root)))
+        if not old_dir.is_dir() or new_dir == old_dir or not new_dir.exists():
+            continue
+        if new_dir.is_dir() and _has_no_files(new_dir):
+            continue
+        conflicts.append(str(new_dir.relative_to(repo_root)))
     if conflicts:
         raise BootstrapError(
             "cannot rename the package -- these paths already exist:\n"
@@ -176,7 +214,10 @@ def check_package_dirs_available(repo_root: Path, new_package: str) -> None:
 def check_target_root_available(repo_root: Path, new_name: str) -> None:
     """The project root directory itself gets renamed to `new_name` as the last
     bootstrap step -- verify nothing already occupies that path before any
-    mutation starts."""
+    mutation starts. If the root is already named `new_name`, it's already
+    bootstrapped -- nothing to rename, and no conflict to check."""
+    if repo_root.name == new_name:
+        return
     target = repo_root.parent / new_name
     if target.exists():
         raise BootstrapError(
@@ -197,7 +238,10 @@ def rename_package_dirs(repo_root: Path, old_package: str, new_package: str) -> 
     """Move the package directory (`.../com/old/pkg`) to its new nested path
     (`.../new/pkg`) under every SOURCE_ROOTS entry where it exists -- old and new
     can have different depth and share no segments at all. Prunes any now-empty
-    old parent directories left behind. Returns the list of new package paths."""
+    old parent directories left behind. If the target already exists as an empty
+    (of real files) leftover -- e.g. from a reverted previous run -- clears it
+    first: `Path.rename` refuses to move onto an existing directory at all on
+    Windows, even an empty one. Returns the list of new package paths."""
     old_path = package_to_path(old_package)
     new_path = package_to_path(new_package)
     renamed = []
@@ -207,6 +251,8 @@ def rename_package_dirs(repo_root: Path, old_package: str, new_package: str) -> 
         if not old_dir.is_dir():
             continue
         new_dir = root_dir / new_path
+        if new_dir.is_dir() and new_dir != old_dir and _has_no_files(new_dir):
+            shutil.rmtree(new_dir)
         new_dir.parent.mkdir(parents=True, exist_ok=True)
         old_dir.rename(new_dir)
         _prune_empty_ancestors(old_dir.parent, root_dir)
@@ -250,24 +296,51 @@ def rename_project_root(repo_root: Path, new_name: str) -> Path:
     `repo_root` path stops existing once this returns. Changes the process's
     cwd to the parent first -- on Windows, renaming a directory that's the
     current working directory of a running process fails with a permission
-    error."""
+    error. If the root is already named `new_name`, there's nothing to
+    rename."""
+    if repo_root.name == new_name:
+        return repo_root
     new_root = repo_root.parent / new_name
     os.chdir(repo_root.parent)
     repo_root.rename(new_root)
     return new_root
 
 
+def run_gradle_sync(repo_root: Path) -> None:
+    """Emulate an IDE "Gradle sync" from the CLI: `gradlew tasks` fully configures
+    every module/target without building anything -- the cheapest way to catch a
+    build script left broken by the renames above. Non-fatal: the renames already
+    succeeded by the time this runs, so a sync failure is reported, not raised --
+    the user can always re-sync from their IDE."""
+    wrapper = repo_root / ("gradlew.bat" if os.name == "nt" else "gradlew")
+    if not wrapper.is_file():
+        print(f"\nSkipping gradle sync -- no wrapper found at {wrapper}")
+        return
+
+    print(f"\nRunning gradle sync ({wrapper.name} tasks)...")
+    result = subprocess.run([str(wrapper), "tasks"], cwd=repo_root, shell=(os.name == "nt"))
+    if result.returncode != 0:
+        print(
+            f"\ngradle sync failed (exit {result.returncode}) -- the rename itself "
+            "succeeded above; inspect the Gradle output and re-sync from your IDE."
+        )
+
+
 def bootstrap(repo_root: Path, config_path: Path) -> Path:
-    """Runs the full bootstrap. Returns the project root's new path -- the
-    directory itself gets renamed to `app_name` as the last step, so the
-    original `repo_root` no longer exists once this returns (unless that last
-    step failed, in which case `repo_root` is returned unchanged -- see below)."""
+    """Runs the full bootstrap. Safe to re-run -- any marker already at its
+    template.toml-configured value is left alone instead of raising. Returns
+    the project root's new path -- the directory itself gets renamed to
+    `app_name` as the last step, so the original `repo_root` no longer exists
+    once this returns (unless that last step failed or wasn't needed, in
+    which case `repo_root` is returned unchanged -- see below). If anything
+    was actually renamed/replaced, finishes with a gradle sync; a re-run that
+    turns out to be a full no-op skips it."""
     app_name, package = load_config(config_path)
     validate_package(package)
     validate_app_name(app_name)
     check_not_default(app_name, package)
-    check_pristine_template(repo_root)
-    check_manifest_files_exist(repo_root)
+    check_template_state(repo_root, package, app_name)
+    check_manifest_files_exist(repo_root, package)
     check_package_dirs_available(repo_root, package)
     check_target_root_available(repo_root, app_name)
 
@@ -291,22 +364,35 @@ def bootstrap(repo_root: Path, config_path: Path) -> Path:
         "flag import order in a few files. Run `./gradlew ktlintFormat` once to auto-fix."
     )
 
-    try:
-        new_root = rename_project_root(repo_root, app_name)
-    except OSError as e:
-        print(
-            f"\nEverything above succeeded -- only renaming the project folder itself "
-            f"failed: {e}\n"
-            "This usually means another process (this terminal, an IDE, a File Explorer "
-            f"window) has {repo_root} open as its current directory. Close anything else "
-            "pointed at this folder, then rename it yourself, e.g.:\n"
-            f"  mv {repo_root} {repo_root.parent / app_name}"
-        )
-        return repo_root
+    changed = bool(package_dirs) or bool(package_counts) or bool(name_counts)
 
-    print(f"\nProject folder renamed:\n  {repo_root}\n  -> {new_root}")
-    print(f"\nYour shell is still in the old (now-deleted) directory -- run:\n  cd {new_root}")
-    return new_root
+    if repo_root.name == app_name:
+        print(f"\nProject folder is already named '{app_name}' -- nothing to rename.")
+        final_root = repo_root
+    else:
+        try:
+            final_root = rename_project_root(repo_root, app_name)
+        except OSError as e:
+            print(
+                f"\nEverything above succeeded -- only renaming the project folder itself "
+                f"failed: {e}\n"
+                "This usually means another process (this terminal, an IDE, a File Explorer "
+                f"window) has {repo_root} open as its current directory. Close anything else "
+                "pointed at this folder, then rename it yourself, e.g.:\n"
+                f"  mv {repo_root} {repo_root.parent / app_name}"
+            )
+            final_root = repo_root
+        else:
+            print(f"\nProject folder renamed:\n  {repo_root}\n  -> {final_root}")
+            print(
+                f"\nYour shell is still in the old (now-deleted) directory -- run:\n"
+                f"  cd {final_root}"
+            )
+
+    if changed:
+        run_gradle_sync(final_root)
+
+    return final_root
 
 
 def main() -> int:
