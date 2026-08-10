@@ -6,5 +6,8 @@ ktlint_function_naming_ignore_when_annotated_with=Composable
 # Forces the RHS of an assignment onto its own line whenever it's a multiline expression
 # (e.g. val x =\n    Foo(...)). Keep the rest of ktlint_official, just skip this one rule.
 ktlint_standard_multiline-expression-wrapping = disabled
+# Allows a single-expression function body (e.g. `fun foo(...) = when (...) { ... }`) to stay
+# on the same line as the signature instead of forcing `=` + body onto the next line.
+ktlint_standard_function-signature = disabled
 # Theme-level CompositionLocals: an accepted exception to the "avoid new CompositionLocals" rule.
 compose_allowed_composition_locals = LocalDimens,LocalMotion
