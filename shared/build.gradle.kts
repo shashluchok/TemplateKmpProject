@@ -101,6 +101,12 @@ kotlin {
     }
 }
 
+compose {
+    resources {
+        packageOfResClass = "com.shashluchok.templatekmpproject.resources"
+    }
+}
+
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
