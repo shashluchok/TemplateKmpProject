@@ -66,21 +66,27 @@
   застейдженным файлам, а не по всему проекту — быстрее и не блокирует коммит из-за несвязанных
   файлов, которые вы не трогали.
 
+- detekt-правило `CompositionLocalAllowlist` и ktlint-правило `compose_allowed_composition_locals`
+ругаются на любой `CompositionLocal`, которого нет в белом списке (сейчас там только
+`LocalDimens`). При добавлении нового — впишите его в оба места:
+[config/detekt/detekt.yml](./config/detekt/detekt.yml) (`CompositionLocalAllowlist.allowedCompositionLocals`)
+и [.editorconfig](./.editorconfig) (`compose_allowed_composition_locals`).
+
 Хук подключается автоматически: при первом запуске Gradle (`./gradlew ...`) корневой
 `build.gradle.kts` сам выставляет `core.hooksPath=.githooks` в локальном `.git/config` — руками
 `git config` делать не нужно.
 
 ### Настройка под новый проект
 
+> Весь этот раздел и папка [/bootstrap](./bootstrap) нужны только один раз, при создании нового
+> проекта из шаблона. После шага 5 можно удалить и папку `bootstrap/`, и сам этот раздел из README —
+> в реальном проекте они больше не пригодятся.
+
 1. Нажмите "Use this template" → "Create a new repository" на странице
    [TemplateKmpProject на GitHub](https://github.com/shashluchok/TemplateKmpProject) и создайте
    новый репозиторий в своём аккаунте. GitHub сам создаст его с чистой историей (без связи
    с шаблоном как fork).
 2. Склонируйте уже свой новый репозиторий.
-
-Всё, что касается переименования, лежит в отдельной папке [/bootstrap](./bootstrap) —
-после успешного запуска её можно целиком удалить из проекта.
-
 3. Отредактируйте [bootstrap/template.toml](./bootstrap/template.toml) — `app_name`
    (отображаемое имя) и `package` .
 4. Один раз запустите `python bootstrap/bootstrap_project.py`. Переименует и пакет
