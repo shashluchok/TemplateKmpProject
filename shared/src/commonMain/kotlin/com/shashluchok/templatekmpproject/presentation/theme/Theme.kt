@@ -115,6 +115,7 @@ private val DarkColorScheme =
 internal fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dimens: Dimens = Dimens.DEFAULT,
+    motion: Motion = Motion.DEFAULT,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
@@ -125,6 +126,7 @@ internal fun AppTheme(
     ) {
         CompositionLocalProvider(
             LocalDimens provides dimens,
+            LocalMotion provides motion,
         ) {
             content()
         }

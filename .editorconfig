@@ -7,4 +7,4 @@ ktlint_function_naming_ignore_when_annotated_with=Composable
 # (e.g. val x =\n    Foo(...)). Keep the rest of ktlint_official, just skip this one rule.
 ktlint_standard_multiline-expression-wrapping = disabled
 # Theme-level CompositionLocals: an accepted exception to the "avoid new CompositionLocals" rule.
-compose_allowed_composition_locals = LocalDimens
+compose_allowed_composition_locals = LocalDimens,LocalMotion

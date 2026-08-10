@@ -44,7 +44,7 @@ Compose:
     active: true
   CompositionLocalAllowlist:
     active: true
-    allowedCompositionLocals: LocalDimens
+    allowedCompositionLocals: LocalDimens,LocalMotion
   CompositionLocalNaming:
     active: true
   ContentEmitterReturningValues:
