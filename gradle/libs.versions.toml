@@ -29,6 +29,9 @@ composeRulesDetekt = "0.4.28"
 kotlin-wrappers = "2026.8.0"
 kotlinx-coroutines = "1.11.0"
 
+# Animation
+compottie = "2.2.4"
+
 # DI
 koin = "4.2.2"
 
@@ -58,6 +61,10 @@ compose-rules-detekt = { module = "io.nlopez.compose.rules:detekt", version.ref 
 # Kotlin ecosystem
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlin-wrappers" }
+
+# Animation
+compottie = { module = "io.github.alexzhirkevich:compottie", version.ref = "compottie" }
+compottie-resources = { module = "io.github.alexzhirkevich:compottie-resources", version.ref = "compottie" }
 
 # DI
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }

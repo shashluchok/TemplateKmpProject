@@ -26,6 +26,7 @@
 | detekt (плагин) | 1.23.8 |
 | Koin | 4.2.2 |
 | Navigation3 | 1.1.1 |
+| Compottie | 2.2.4 |
 
 Версии зафиксированы централизованно в [gradle/libs.versions.toml](./gradle/libs.versions.toml)
 (version catalog) — там же и остальные зависимости (AndroidX, kotlinx.coroutines и т.д.).
@@ -48,6 +49,10 @@
   проверяется через [config/string-keys](./config/string-keys) (подробнее — ниже, в разделе про git-хуки).
 - **Git-хуки** — ktlint, detekt и проверка формата строковых ключей на застейдженных файлах при коммите
   (подробнее — ниже).
+- **Lottie-анимации** — [Compottie](https://github.com/alexzhirkevich/compottie), рендерер Lottie
+  на чистом Kotlin (без platform delegates), работает на всех таргетах шаблона, включая
+  Wasm/JS. Подключены `compottie` и `compottie-resources` — второй модуль умеет грузить
+  анимации прямо из compose-ресурсов (`LottieCompositionSpec.Resource(...)`).
 
 ### Git-хуки
 
