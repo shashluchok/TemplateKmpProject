@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-commit checks: string resource key format, ktlint, detekt.
+# Pre-commit checks: string resource key format, ktlint format+check, detekt.
 #
 # Installed automatically -- see the core.hooksPath setup in the root build.gradle.kts.
 # No manual `git config` step required.
@@ -21,10 +21,17 @@ if [ -n "$STRING_RES_FILES" ]; then
     fi
 fi
 
-# 2. ktlint + detekt, both scoped to staged files only (see -Pprecommit wiring
-#    in build.gradle.kts) ------------------------------------------------------
+# 2. ktlintFormat + ktlint + detekt, all scoped to staged files only (see
+#    -Pprecommit wiring in build.gradle.kts) ----------------------------------
 KT_FILES=$(echo "$STAGED_FILES" | grep -E '\.kts?$' || true)
 if [ -n "$KT_FILES" ]; then
+    echo "-> Running ktlintFormat (staged files only)..."
+    if ! ./gradlew -Pprecommit=true ktlintFormat --console=plain; then
+        FAIL=1
+    fi
+    # Re-stage any files ktlintFormat rewrote so the fixes are actually committed.
+    git add -- $KT_FILES
+
     echo "-> Running ktlint + detekt (staged files only)..."
     if ! ./gradlew -Pprecommit=true ktlintCheck detekt --console=plain; then
         FAIL=1
